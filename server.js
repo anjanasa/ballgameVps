@@ -1,7 +1,7 @@
 require("dotenv").config();
-const io = require("socket.io")(process.env.APP_PORT, {
+const io = require("socket.io")(process.env.PORT || 3000, {
   cors: {
-    origin: process.env.CORS_ORIGINE,
+    origin: "https://lotterygame-e2aa47720b09.herokuapp.com",
   },
 });
 const overPercentage = {
@@ -47,10 +47,10 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Create MySQL connection
 const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.MYSQL_DB, // Adjust according to your database name
+  host: "209.74.67.55",
+  user: "playyyvl_anjana",
+  password: "islandRush2024",
+  database: "playyyvl_nadeera_game", // Adjust according to your database name
 });
 
 // Connect to MySQL
