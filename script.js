@@ -25,8 +25,11 @@ const underPercentage = {
 // Payout percentages for MATCHES and DIFFERS
 const matchesPayout = 8; // Adjust this to your desired MATCHES payout
 const differsPayout = 0.05; // Adjust this to your desired DIFFERS payout
+//for server
+//const socket = io("https://ballgame.playislandrush.com/");
+//for local
+const socket = io("http://localhost:3000" || "http://127.0.0.1:3000");
 
-const socket = io("http://lotterygame-e2aa47720b09.herokuapp.com:3000");
 var loggedUser = "null";
 var bitStatus = "none";
 var selectedNumber = 2;
@@ -177,10 +180,13 @@ socket.on("login", (data, result, id) => {
     gameDiv.style.display = "flex";
     document.getElementById("loginDiv").style.display = "none";
     loggedUser = result[0];
+    console.log(1, " Login successful updated balance is ", loggedUser.balance);
     saveLogin(result[0]);
     let balance = document.getElementById("balance");
     let currBal = loggedUser.balance.toFixed(2);
-    balance.innerHTML = currBal;
+    if (bitStatus == "none") {
+      balance.innerHTML = currBal;
+    }
     if (logged == false) {
       notification("Login successful <br> Welcome " + loggedUser.user_name);
       logged = true;
@@ -275,15 +281,22 @@ socket.on("guserdata", (array) => {
 socket.on("update user data", (data, array) => {
   if (data == "update") {
     socket.emit("user data update", socket.id, loggedUser.user_id);
+    console.log(
+      "update user data after bid closed from server ",
+      loggedUser.balance
+    );
   }
   if (data == "updated") {
-    loggedUser = array;
+    //after server update user data fetch agin
+    socket.emit("login", usernameData, passwordData, socket.id);
+    //loggedUser = array;
 
     show_updated_user_data(loggedUser);
     function show_updated_user_data(array) {
       let balance = document.getElementById("balance");
       let currBal = array.balance.toFixed(2);
       balance.innerHTML = currBal;
+      console.log(`updated  user data balance update: ${currBal}`);
     }
   }
 });
@@ -292,6 +305,10 @@ socket.on("bid", (msg) => {
     bitStatus = "bid placed";
     start.play();
     notification("Bid places succsesfully");
+    let currBal = (loggedUser.balance - currunt_stake).toFixed(2);
+    let balance = document.getElementById("balance");
+    balance.innerHTML = currBal;
+    console.log(3, " balance update after bid placed: ", currBal);
   }
 });
 socket.on("choosen digit", (digit) => {
@@ -318,10 +335,14 @@ socket.on("long digit array", (longarray) => {
 });
 
 /**/
+var usernameData = "";
+var passwordData = "";
 const loginButton = document.getElementById("loginButton");
 loginButton.addEventListener("click", () => {
   const username = document.getElementById("usernameInput").value; // Get the value of the username input
   const password = document.getElementById("passwordInput").value; // Get the value of the password input
+  usernameData = username;
+  passwordData = password;
   socket.emit("login", username, password, socket.id); // Emit the login event with the user credentials
 });
 /*catbtn click*/
@@ -343,15 +364,20 @@ catbtns.forEach((catbtn) => {
 /*start button click*/
 const startBtn = document.getElementById("stratBtnText");
 startBtn.addEventListener("click", () => {
-  /*check user balance before placing bid*/
   if (loggedUser.balance >= currunt_stake && bitStatus == "none") {
+    console.log(
+      2,
+      " bid placed succsesfully Btn Click ",
+      `original balance: ${
+        loggedUser.balance
+      } stake: ${currunt_stake} new balance: ${
+        loggedUser.balance - currunt_stake
+      }`
+    );
     //bitStatus = "bid placed";
     startBtn.innerHTML = "WAIT";
     startBtn.style.pointerEvents = "none";
     startBtn.style.display = "flex";
-    let currBal = (loggedUser.balance - currunt_stake).toFixed(2);
-    let balance = document.getElementById("balance");
-    balance.innerHTML = currBal;
     socket.emit(
       "bid",
       selectedNumber,
@@ -365,6 +391,39 @@ startBtn.addEventListener("click", () => {
       socket.id
     );
   }
+  /*check user balance before placing bid*/
+  /*socket.emit("balverify", usernameData, passwordData, socket.id); // Emit the login event with the user credentials
+  socket.on("balverify_responce", (data, results) => {
+    if (data == "Login successful") {
+      let userdata = results[0];
+      let userbalance = userdata.balance;
+      if (userbalance >= currunt_stake && bitStatus == "none") {
+        //bitStatus = "bid placed";
+        startBtn.innerHTML = "WAIT";
+        startBtn.style.pointerEvents = "none";
+        startBtn.style.display = "flex";
+        let currBal = (userbalance - currunt_stake).toFixed(2);
+        let balance = document.getElementById("balance");
+        balance.innerHTML = currBal;
+        socket.emit(
+          "bid",
+          selectedNumber,
+          selectedCategory,
+          currunt_stake,
+          loggedUser.Serial,
+          loggedUser.user_name,
+          userbalance,
+          loggedUser.bet_history,
+          loggedUser.profit_loss_history,
+          socket.id
+        );
+      } else if (userbalance < currunt_stake) {
+        console.log("Insufficent Balance Please TopUp Your Account");
+      }
+    } else {
+      alert("Somthing Is Wrong Please Restart the game");
+    }
+  });*/
 });
 
 /*histry btn click */
@@ -425,6 +484,13 @@ btnConfig.forEach((btnConfig) => {
     }
     if (btnConfig.attributes.name.value == "wallet") {
       // Add functionality for the "wallet" section here
+      console.log(
+        "wallet link = ",
+        `https://playislandrush.com/wallet/index.php?user_id=${loggedUser.user_id}&token=${loggedUser.token}`
+      );
+      window.open(
+        `https://playislandrush.com/wallet/index.php?user_id=${loggedUser.user_id}&token=${loggedUser.token}`
+      );
     }
     if (btnConfig.attributes.name.value == "chart") {
       const tradeHisContainer = document.getElementById("tradeHisContainer");
@@ -508,7 +574,24 @@ function digitConfig() {
   showReturn();
 }
 function saveLogin(result) {
-  let db_login = JSON.parse(result.last_login);
+  // Handle null or undefined last_login
+  let db_login;
+  if (!result.last_login || result.last_login === null || result.last_login === 'null') {
+    db_login = [];
+  } else {
+    try {
+      db_login = JSON.parse(result.last_login);
+      // If parsing returns null, initialize empty array
+      if (db_login === null || !Array.isArray(db_login)) {
+        db_login = [];
+      }
+    } catch (e) {
+      // If parsing fails, initialize empty array
+      console.error("Error parsing last_login:", e);
+      db_login = [];
+    }
+  }
+  
   let array = db_login;
   array.push(getCurrentDateTime());
   let stringifyArray = JSON.stringify(array);
@@ -564,7 +647,7 @@ async function notification(text) {
   notification.style.display = "flex";
 
   // Wait for 5 seconds
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   // Add the 'hide' class to trigger the fade-out animation
   notification.classList.remove("show");

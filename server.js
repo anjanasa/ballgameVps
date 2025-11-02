@@ -1,9 +1,13 @@
 require("dotenv").config();
 const io = require("socket.io")(process.env.PORT || 3000, {
   cors: {
-    origin: "https://lotterygame-e2aa47720b09.herokuapp.com",
+    //for server
+    //origin: process.env.CORS_ORIGIN,
+    //for local
+    origin: "http://127.0.0.1:5500",
   },
 });
+var serverOnBidding = true;
 const overPercentage = {
   0: 0.05,
   1: 0.09,
@@ -46,11 +50,18 @@ app.use(cors()); // Enable CORS if you're making requests from a different origi
 app.use(express.static(path.join(__dirname, "public")));
 
 // Create MySQL connection
+/*const db = mysql.createConnection({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.MYSQL_DB, // Adjust according to your database name
+});
+*/
 const db = mysql.createConnection({
-  host: "209.74.67.55:3306",
-  user: "playyyvl_anjana",
-  password: "islandRush2024",
-  database: "playyyvl_nadeera_game", // Adjust according to your database name
+  host: '46.202.167.1',
+  user: 'remoteuser',
+  password: 'StrongPassword123!',
+  database: 'nadeera_game'
 });
 
 // Connect to MySQL
@@ -69,9 +80,15 @@ io.on("connection", (socket) => {
   sockId = socket.id;
   console.log(sockId);
   io.to(socket.id).emit("connected", sockId);
+
   socket.on("login", (username, password, id) => {
     console.log("user login ", username, password, id);
     userLogin(username, password, socket.id);
+  });
+
+  socket.on("balverify", (username, password, id) => {
+    console.log("user login for balverify", username, password, id);
+    balance_verify(username, password, socket.id);
   });
 
   /*get bid request and check user balance then approve trade*/
@@ -88,59 +105,72 @@ io.on("connection", (socket) => {
       profit_loss_history,
       socketId
     ) => {
-      /*check user balance before placing bid*/
-
-      db.query(
-        "SELECT * FROM lottery_game_users WHERE user_name = ? AND Serial = ?",
-        [user_name, Serial],
-        (err, result) => {
-          if (err) {
-            console.error("Error logging in:", err);
-            return;
-          }
-          if (result.length > 0) {
-            console.log("balance fetch succsesfull");
-            let socketId = socket.id;
-            bid_array.push({
-              sellDigit,
-              SellCategory,
-              defaultStake,
-              Serial,
-              user_name,
-              balance,
-              bet_history,
-              profit_loss_history,
-              socketId,
-            });
-            io.to(socket.id).emit("bid", "bid places succsesfully");
-            userBetiingHistory.push({ name: user_name, bet: defaultStake });
-            if (userBetiingHistory.length > 0) {
-              userBetiingHistory.shift();
-            }
-            io.emit("guserdata", userBetiingHistory);
-            console.log("bid places succsesfully");
-            console.log({
-              sellDigit,
-              SellCategory,
-              defaultStake,
-              Serial,
-              user_name,
-              balance,
-              socketId,
-            });
-            io.to(socketId).emit("login", "Login successful", result);
-          } else {
-            console.log("Login failed");
-            io.to(socketId).emit("login", "Login failed");
-          }
-        }
+      console.log(
+        "user login for bid",
+        sellDigit,
+        SellCategory,
+        defaultStake,
+        Serial,
+        user_name,
+        balance,
+        socketId
       );
+      /*check user balance before placing bid*/
+      if (serverOnBidding == true) {
+        db.query(
+          "SELECT * FROM game_users WHERE user_name = ? AND Serial = ?",
+          [user_name, Serial],
+          (err, result) => {
+            if (err) {
+              console.error("Error logging in:", err);
+              return;
+            }
+            if (result.length > 0) {
+              console.log("balance fetch succsesfull");
+              let socketId = socket.id;
+              bid_array.push({
+                sellDigit,
+                SellCategory,
+                defaultStake,
+                Serial,
+                user_name,
+                balance,
+                bet_history,
+                profit_loss_history,
+                socketId,
+              });
+              console.log(bid_array[0].balance);
+              io.to(socket.id).emit("bid", "bid places succsesfully");
+              userBetiingHistory.push({ name: user_name, bet: defaultStake });
+              if (userBetiingHistory.length > 0) {
+                userBetiingHistory.shift();
+              }
+              io.emit("guserdata", userBetiingHistory);
+              console.log("bid places succsesfully");
+              console.log({
+                sellDigit,
+                SellCategory,
+                defaultStake,
+                Serial,
+                user_name,
+                balance,
+                socketId,
+              });
+              io.to(socketId).emit("login", "Login successful", result);
+            } else {
+              console.log("Login failed");
+              io.to(socketId).emit("login", "Login failed");
+            }
+          }
+        );
+      }
     }
   );
 });
+
 function userLogin(user_name, password, socketId) {
   db.query(
-    "SELECT * FROM lottery_game_users WHERE user_name = ? AND password = ?",
+    "SELECT * FROM game_users WHERE user_name = ? AND password = ?",
     [user_name, password],
     (err, result) => {
       if (err) {
@@ -153,6 +183,25 @@ function userLogin(user_name, password, socketId) {
       } else {
         console.log("Login failed");
         io.to(socketId).emit("login", "Login failed");
+      }
+    }
+  );
+}
+function balance_verify(user_name, password, socketId) {
+  db.query(
+    "SELECT * FROM game_users WHERE user_name = ? AND password = ?",
+    [user_name, password],
+    (err, result) => {
+      if (err) {
+        console.error("Error logging in:", err);
+        return;
+      }
+      if (result.length > 0) {
+        console.log("Login successful");
+        io.to(socketId).emit("balverify_responce", "Login successful", result);
+      } else {
+        console.log("Login failed");
+        io.to(socketId).emit("balverify_responce", "Login failed");
       }
     }
   );
@@ -172,6 +221,7 @@ async function startCountdownLoop() {
       io.emit("current state", i, "bs");
       if (i === 0) {
         //console.log('selecting start');
+        serverOnBidding = false;
         bidCal(bid_array);
       }
     }
@@ -184,6 +234,7 @@ async function startCountdownLoop() {
 
       io.emit("current state", i, "ss");
       if (i === 0) {
+        serverOnBidding = true;
         //console.log('bidding start');
         profit_loss_cal(bid_array);
         bid_array = [];
@@ -400,7 +451,7 @@ var longDigitArray = [
   }*/
 
 /*v2 with profit payout track*/
-let sessionMetrics = {
+/*let sessionMetrics = {
   totalBets: 0,
   totalPayouts: 0,
   profit: 0,
@@ -410,14 +461,15 @@ let allTimeMetrics = {
   totalBets: 0,
   totalPayouts: 0,
   profit: 0,
-};
+};*/
 
 // Function to calculate bids and update metrics
 function bidCal(array) {
+  //console.log(array);
   console.log("Bid Calculation Initiated");
   let totalSessionPayout = 0; // Initialize total payout for the session
 
-  if (array.length === 0) {
+  if (array.length == 0) {
     console.log("No bids available, selecting a random digit.");
 
     function getRandomNumber() {
@@ -425,11 +477,12 @@ function bidCal(array) {
     }
 
     choosenDigit = getRandomNumber();
-    console.log("Digit chosen by random:", choosenDigit);
+    //console.log("Digit chosen by random:", choosenDigit);
   } else {
     console.log("Bids available, selecting a digit using the algorithm.");
-
+    /*
     function calculateNextWinningDigit(bids) {
+      //console.log("getting bids", bids);
       let minTotalPayout = Infinity;
       let minPayoutDigits = []; // Store digits with the same minimum payout
       let payoutLog = {}; // To store payouts for each digit
@@ -484,42 +537,158 @@ function bidCal(array) {
       }
 
       // Randomly select a digit among the most profitable ones
+      console.log("Min Payout Digits from algo original = :", minPayoutDigits);
       const randomIndex = Math.floor(Math.random() * minPayoutDigits.length);
       return { selectedDigit: minPayoutDigits[randomIndex], minTotalPayout };
+    }*/
+    const overPercentage = {
+      0: 0.05,
+      1: 0.09,
+      2: 0.2,
+      3: 0.4,
+      4: 0.6,
+      5: 0.95,
+      6: 1.4,
+      7: 2.1,
+      8: 8.0,
+      9: 0.0,
+    };
+
+    const underPercentage = {
+      0: 0.0,
+      1: 8.0,
+      2: 2.1,
+      3: 1.4,
+      4: 0.95,
+      5: 0.6,
+      6: 0.4,
+      7: 0.2,
+      8: 0.09,
+      9: 0.05,
+    };
+
+    const matchesPayout = 8;
+    const differsPayout = 0.05;
+
+    const evenPayout = 1.9; // Example payout for EVEN bets
+    const oddPayout = 1.9; // Example payout for ODD bets
+
+    function calculateMaxProfitWinningNumber(bids) {
+      const profitMap = {};
+
+      for (let number = 0; number <= 9; number++) {
+        let totalProfit = 0;
+
+        bids.forEach((bid) => {
+          const sellDigit = parseInt(bid.sellDigit);
+          const { SellCategory, defaultStake } = bid;
+          const stake = parseFloat(defaultStake);
+
+          if (SellCategory === "OVER") {
+            if (number > sellDigit) {
+              const payout = stake * overPercentage[sellDigit];
+              //console.log(`Number ${number} OVER bet payout: ${payout}`);
+              totalProfit -= payout;
+            } else totalProfit += stake;
+          }
+
+          if (SellCategory === "UNDER") {
+            if (number < sellDigit) {
+              const payout = stake * underPercentage[sellDigit];
+              //console.log(`Number ${number} UNDER bet payout: ${payout}`);
+              totalProfit -= payout;
+            } else totalProfit += stake;
+          }
+
+          if (SellCategory === "MATCHES") {
+            if (number === sellDigit) {
+              const payout = stake * matchesPayout;
+              //console.log(`Number ${number} MATCHES bet payout: ${payout} username${bid.user_name}`);
+              totalProfit -= payout;
+            } else totalProfit += stake;
+          }
+          if (SellCategory === "DIFFERS") {
+            //console.log("comming babay");
+            if (number !== sellDigit) {
+              const payout = stake * differsPayout;
+              totalProfit -= payout;
+            } else totalProfit += stake;
+          }
+
+          if (SellCategory === "EVEN") {
+            if (number % 2 === 0) {
+              const payout = stake * evenPayout;
+              //onsole.log(`Number ${number} EVEN bet payout: ${payout}`);
+              totalProfit -= payout;
+            } else totalProfit += stake;
+          }
+
+          if (SellCategory === "ODD") {
+            if (number % 2 !== 0) {
+              const payout = stake * oddPayout;
+              //console.log(`Number ${number} ODD bet payout: ${payout}`);
+              totalProfit -= payout;
+            } else totalProfit += stake;
+          }
+          /*console.log(
+            "number = ",
+            number,
+            "  ",
+            "profit = ",
+            totalProfit,
+            " selldigit = ",
+            sellDigit
+          );*/
+        });
+
+        console.log(`number = ${number} total profit = ${totalProfit}`);
+        profitMap[number] = totalProfit;
+      }
+
+      const maxProfit = Math.max(...Object.values(profitMap));
+      const suitableNumbers = Object.keys(profitMap).filter(
+        (number) => profitMap[number] === maxProfit
+      );
+      console.log("suitableNumbers from algo testing = ", suitableNumbers);
+      return suitableNumbers[
+        Math.floor(Math.random() * suitableNumbers.length)
+      ];
     }
 
-    const { selectedDigit, minTotalPayout } = calculateNextWinningDigit(array);
-    console.log("Next winning digit selected:", selectedDigit);
-    choosenDigit = selectedDigit;
+    const algoDigit = calculateMaxProfitWinningNumber(array);
+    // console.log("testing one", testing1);
+    //const { selectedDigit, minTotalPayout } = calculateNextWinningDigit(array);
+    console.log("Next winning digit selected:", algoDigit);
+    choosenDigit = algoDigit;
 
     // Update session payout
-    totalSessionPayout = minTotalPayout;
+    /* totalSessionPayout = minTotalPayout;
     array.forEach((bid) => {
       const { defaultStake } = bid;
       sessionMetrics.totalBets += parseFloat(defaultStake); // Add stakes to total bets
     });
 
-    sessionMetrics.totalPayouts += totalSessionPayout;
+    sessionMetrics.totalPayouts += totalSessionPayout;*/
   }
 
   // Update session profit
-  sessionMetrics.profit =
-    sessionMetrics.totalBets - sessionMetrics.totalPayouts;
+  /*sessionMetrics.profit =
+    sessionMetrics.totalBets - sessionMetrics.totalPayouts;*/
 
   // Update all-time metrics
-  allTimeMetrics.totalBets += sessionMetrics.totalBets;
+  /*allTimeMetrics.totalBets += sessionMetrics.totalBets;
   allTimeMetrics.totalPayouts += sessionMetrics.totalPayouts;
   allTimeMetrics.profit =
-    allTimeMetrics.totalBets - allTimeMetrics.totalPayouts;
+    allTimeMetrics.totalBets - allTimeMetrics.totalPayouts;*/
 
   // Broadcast the chosen digit and metrics
   io.emit("choosen digit", choosenDigit);
-  io.emit("session metrics", sessionMetrics);
-  io.emit("all time metrics", allTimeMetrics);
+  //io.emit("session metrics", sessionMetrics);
+  //io.emit("all time metrics", allTimeMetrics);
 
   console.log("Digit chosen and broadcasted:", choosenDigit);
-  console.log("Session Metrics:", sessionMetrics);
-  console.log("All-Time Metrics:", allTimeMetrics);
+  //console.log("Session Metrics:", sessionMetrics);
+  //console.log("All-Time Metrics:", allTimeMetrics);
 }
 
 function profit_loss_cal(array) {
@@ -536,7 +705,7 @@ function profit_loss_cal(array) {
     }, {});
     const result = Object.values(lastObjectsBySerial);
 
-    //console.log("choosenDigit", choosenDigit);
+    console.log("choosenDigit", choosenDigit);
     let data = [];
     for (let i = 0; i < result.length; i++) {
       const bid = result[i];
@@ -569,6 +738,13 @@ function profit_loss_cal(array) {
           // if loss
           data[i].PL = "loss";
           data[i].afterBalance = bid.balance - bid.defaultStake;
+          console.log(
+            `after balance = ${data[i].afterBalance} bid.balance = ${
+              bid.balance
+            } bid.defaultStake = ${bid.defaultStake} final balance should be ${
+              bid.balance - bid.defaultStake
+            }`
+          );
         }
         //epProfit
         let overPercentageval = bid.sellDigit;
@@ -606,6 +782,7 @@ function profit_loss_cal(array) {
         data[i].epProfit = bid.defaultStake * matchesPayout;
       }
       if (bid.SellCategory == "DIFFERS") {
+        //console.log("differs calling", bid.sellDigit, choosenDigit);
         if (bid.sellDigit != choosenDigit) {
           // if won
           data[i].PL = "won";
@@ -640,7 +817,7 @@ function profit_loss_cal(array) {
       });
       data[i].profit_loss_history = JSON.stringify(profit_loss_history);
     }
-    //console.log("Prossed data",data);
+    //console.log("Prossed data", data);
 
     //send won loss Notifications to specific socket id
     for (let i = 0; i < data.length; i++) {
@@ -705,7 +882,7 @@ function saveTradeInfo_toDB_in_users(dataArray) {
 
   // Generate the SQL update query with CASE statements
   const query = `
-      UPDATE lottery_game_users
+      UPDATE game_users
       SET
         balance = CASE Serial
           ${data
@@ -739,5 +916,6 @@ function saveTradeInfo_toDB_in_users(dataArray) {
     console.log("Data updated successfully");
     //emit to client
     io.emit("update user data", "update", dataArray);
+    io.emit("update user data", "updated", dataArray);
   });
 }
