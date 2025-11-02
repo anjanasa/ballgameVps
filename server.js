@@ -47,7 +47,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Create MySQL connection
 const db = mysql.createConnection({
-  host: "209.74.67.55",
+  host: "209.74.67.55:3306",
   user: "playyyvl_anjana",
   password: "islandRush2024",
   database: "playyyvl_nadeera_game", // Adjust according to your database name
