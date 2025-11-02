@@ -1,10 +1,19 @@
 require("dotenv").config();
-const io = require("socket.io")(process.env.PORT || 4000, {
+const express = require("express");
+const mysql = require("mysql");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const path = require("path");
+const http = require("http");
+
+const app = express();
+const server = http.createServer(app);
+const io = require("socket.io")(server, {
   cors: {
     //for server
     //origin: process.env.CORS_ORIGIN,
     //for local
-    origin: "http://127.0.0.1:5500",
+    origin: "*",
   },
 });
 var serverOnBidding = true;
@@ -36,18 +45,24 @@ const underPercentage = {
 const matchesPayout = 8; // Adjust this to your desired MATCHES payout
 const differsPayout = 0.05; // Adjust this to your desired DIFFERS payout
 
-const express = require("express");
-const mysql = require("mysql");
-const bodyParser = require("body-parser");
-const cors = require("cors");
-const path = require("path");
-
-const app = express();
 app.use(bodyParser.json());
 app.use(cors()); // Enable CORS if you're making requests from a different origin
 
-// Serve static files from the "public" folder
-app.use(express.static(path.join(__dirname, "public")));
+// Serve static files from the root directory
+app.use(express.static(__dirname));
+
+// Serve index.html for root route
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// Start the server
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+  console.log(`Access your app at: http://localhost:${PORT}`);
+  console.log(`If hosted on VPS, access at: http://YOUR_VPS_IP:${PORT}`);
+});
 
 // Create MySQL connection
 /*const db = mysql.createConnection({

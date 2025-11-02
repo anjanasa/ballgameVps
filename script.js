@@ -25,10 +25,30 @@ const underPercentage = {
 // Payout percentages for MATCHES and DIFFERS
 const matchesPayout = 8; // Adjust this to your desired MATCHES payout
 const differsPayout = 0.05; // Adjust this to your desired DIFFERS payout
-//for server
-//const socket = io("https://ballgame.playislandrush.com/");
-//for local
-const socket = io("http://localhost:3000" || "http://127.0.0.1:3000");
+// Socket connection - automatically uses current host and port
+// For local development: http://localhost:4000
+// For VPS: http://YOUR_VPS_IP:4000 or https://YOUR_DOMAIN
+const getSocketUrl = () => {
+  const origin = window.location.origin;
+  const port = window.location.port;
+  
+  // If accessing via standard port (80/443), don't add port number
+  if (!port || port === '80' || port === '443') {
+    return origin;
+  }
+  
+  // Otherwise use the same origin (will work on same domain/port)
+  // For VPS, if you access via http://IP:4000, socket will use same
+  return origin;
+};
+
+const socket = io(getSocketUrl());
+
+// Alternative: If you have a specific server URL, uncomment and use this instead:
+// For production server:
+// const socket = io("https://ballgame.playislandrush.com/");
+// For VPS with specific IP:
+// const socket = io("http://YOUR_VPS_IP:4000");
 
 var loggedUser = "null";
 var bitStatus = "none";
