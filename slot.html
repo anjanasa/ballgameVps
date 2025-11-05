@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slot Machine</title>
+    <style>
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: #222;
+        color: #fff;
+        font-family: Arial, sans-serif;
+      }
+
+      .slot-machine {
+        display: flex;
+        border: 2px solid #fff;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .reel {
+        width: 100px;
+        height: 100px;
+        overflow: hidden;
+        position: relative;
+        background-color: #333;
+        border-right: 2px solid #fff;
+      }
+
+      .reel:last-child {
+        border-right: none;
+      }
+
+      .reel-inner {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .symbol {
+        width: 100%;
+        height: 100px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 48px;
+        font-weight: bold;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: translateY(0);
+        }
+        100% {
+          transform: translateY(-1100px);
+        }
+      }
+
+      .spinning .reel-inner {
+        animation: spin 1s linear infinite;
+      }
+
+      .stopping .reel-inner {
+        animation: none;
+        transition: transform 2s cubic-bezier(0, 0, 0.25, 1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="slot-machine">
+      <div class="reel" id="reel1">
+        <div class="reel-inner"></div>
+      </div>
+      <div class="reel" id="reel2">
+        <div class="reel-inner"></div>
+      </div>
+      <div class="reel" id="reel3">
+        <div class="reel-inner"></div>
+      </div>
+    </div>
+
+    <script>
+      const reels = {
+        left: document.getElementById("reel1"),
+        middle: document.getElementById("reel2"),
+        right: document.getElementById("reel3"),
+      };
+
+      const symbols = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "?"];
+      const repeats = 5;
+      const cycle = symbols.length * 100; // 1100
+      const transitionDuration = 2000; // ms
+      const extraSpins = 3; // k
+
+      function initReel(reel) {
+        const inner = reel.querySelector(".reel-inner");
+        inner.innerHTML = "";
+        for (let i = 0; i < repeats; i++) {
+          symbols.forEach((sym) => {
+            const div = document.createElement("div");
+            div.className = "symbol";
+            div.textContent = sym;
+            inner.appendChild(div);
+          });
+        }
+      }
+
+      function getCurrentTranslateY(inner) {
+        const style = window.getComputedStyle(inner);
+        const matrix = style.transform || style.webkitTransform || "none";
+        if (matrix === "none") {
+          return 0;
+        }
+        const values = matrix.split("(")[1].split(")")[0].split(",");
+        return parseFloat(values[5]) || 0;
+      }
+
+      function startSpin(reel) {
+        const inner = reel.querySelector(".reel-inner");
+        reel.classList.add("spinning");
+        reel.classList.remove("stopping");
+        inner.style.transform = "translateY(0)";
+      }
+
+      function stopSpin(reel, target) {
+        const inner = reel.querySelector(".reel-inner");
+        let targetIndex;
+        if (target === "?") {
+          targetIndex = symbols.length - 1;
+        } else {
+          const num = parseInt(target);
+          if (num < 0 || num > 9) {
+            console.error("Number must be 0-9");
+            return;
+          }
+          targetIndex = num;
+        }
+        const targetP = targetIndex * 100;
+        const currentY = getCurrentTranslateY(inner);
+        const currentP = -currentY;
+        const currentMod = ((currentP % cycle) + cycle) % cycle;
+        const targetMod = ((targetP % cycle) + cycle) % cycle;
+        const fraction = (targetMod - currentMod + cycle) % cycle;
+        const additional = extraSpins * cycle + fraction;
+        const toP = currentP + additional;
+        const toY = -toP;
+
+        reel.classList.remove("spinning");
+        reel.classList.add("stopping");
+
+        setTimeout(() => {
+          inner.style.transform = `translateY(${toY}px)`;
+        }, 0);
+
+        setTimeout(() => {
+          inner.style.transition = "none";
+          inner.style.transform = `translateY(${-targetP}px)`;
+          reel.classList.remove("stopping");
+          setTimeout(() => {
+            inner.style.transition = "transform 2s cubic-bezier(0, 0, 0.25, 1)";
+          }, 50);
+        }, transitionDuration);
+      }
+
+      function setWithoutAnimation(reel, target) {
+        const inner = reel.querySelector(".reel-inner");
+        let targetIndex;
+        if (target === "?") {
+          targetIndex = symbols.length - 1;
+        } else {
+          targetIndex = parseInt(target);
+        }
+        const targetP = targetIndex * 100;
+        inner.style.transition = "none";
+        inner.style.transform = `translateY(${-targetP}px)`;
+        reel.classList.remove("spinning", "stopping");
+        setTimeout(() => {
+          inner.style.transition = "transform 2s cubic-bezier(0, 0, 0.25, 1)";
+        }, 50);
+      }
+
+      function run(first, last) {
+        startSpin(reels.left);
+        startSpin(reels.middle);
+        startSpin(reels.right);
+        stopSpin(reels.left, first);
+        stopSpin(reels.right, last);
+      }
+
+      function result(middle) {
+        stopSpin(reels.middle, middle);
+      }
+
+      function reset() {
+        Object.values(reels).forEach((reel) => {
+          startSpin(reel);
+          stopSpin(reel, "?");
+        });
+      }
+
+      // Initialize
+      Object.values(reels).forEach((reel) => {
+        initReel(reel);
+        setWithoutAnimation(reel, "?");
+      });
+
+      // Example usage:
+      // run(1, 3);
+      // setTimeout(() => result(2), 3000);
+    </script>
+  </body>
+</html>

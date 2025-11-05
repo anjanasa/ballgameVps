@@ -223,6 +223,13 @@ function balance_verify(user_name, password, socketId) {
 }
 
 async function startCountdownLoop() {
+
+  function generateTwoRandomNumbers() {
+    const num1 = Math.floor(Math.random() * 10);
+    const num2 = Math.floor(Math.random() * 10);
+    io.emit("generateTwoRandomNumbers", num1, num2);
+    console.log("pass the genarated numbers", num1, num2);
+  }
   const firstStageDuration = 20; // Duration for the first countdown stage in seconds
   const secondStageDuration = 3; // Duration for the second countdown stage in seconds
 
@@ -238,6 +245,9 @@ async function startCountdownLoop() {
         //console.log('selecting start');
         serverOnBidding = false;
         bidCal(bid_array);
+      }
+      if(i === firstStageDuration-10){
+        generateTwoRandomNumbers();
       }
     }
 

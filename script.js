@@ -22,6 +22,8 @@ const underPercentage = {
   8: 0.09,
   9: 0.05,
 };
+var twoNumbers = [0, 0];
+
 // Payout percentages for MATCHES and DIFFERS
 const matchesPayout = 8; // Adjust this to your desired MATCHES payout
 const differsPayout = 0.05; // Adjust this to your desired DIFFERS payout
@@ -230,6 +232,11 @@ socket.on("current state", (i, data) => {
   st = data;
 
   if (st == "bs") {
+    // Start slot machine when bidding stage begins
+    if (i === 20) {
+      startSlotMachine();
+    }
+    
     if (i <= 10) {
       StBnner.classList.add("statusBarnormal");
       if (loggedUser != "null") {
@@ -250,8 +257,18 @@ socket.on("current state", (i, data) => {
       pBidBtntext.innerHTML = "START";
       pBidBtntext.style.pointerEvents = "all";
       wonlossShow();
+      // Reset slot for next round
+      setTimeout(() => {
+        resetSlot();
+      }, 1000);
     }
   }
+});
+socket.on("generateTwoRandomNumbers", (num1, num2) => {
+  twoNumbers = [num1, num2];
+  console.log("Slot: Received first and last numbers:", num1, num2);
+  // Set first and last slots, middle keeps spinning
+  setSlotFirstLast(num1, num2);
 });
 async function wonlossShow() {
   if (loggedUser != "null") {
@@ -271,6 +288,7 @@ async function wonlossShow() {
 }
 
 socket.on("won loss", (msg, amount) => {
+  //reset();
   const userenterdata = document.getElementById("userenterdata");
   userenterdata.style.display = "flex";
   userenterdata.innerHTML = `
@@ -332,6 +350,10 @@ socket.on("bid", (msg) => {
   }
 });
 socket.on("choosen digit", (digit) => {
+  console.log("Slot: Received chosen digit (middle):", digit);
+  // Stop middle slot with chosen digit
+  setSlotResult(digit);
+  
   chDigit = digit;
   digitHis.push(digit);
   if (digitHis.length > 6) {
@@ -815,61 +837,7 @@ function calculateDigitPercentage(digitIntList, length) {
   return percentages;
 }
 
-let balls = [];
-let animationInterval;
 
-function createBalls() {
-  const lotteryContainer = document.getElementById("lotteryContainer");
-  lotteryContainer.innerHTML = ""; // Clear previous balls
-
-  balls = []; // Reset balls array
-
-  // Get the dimensions of the lottery container
-  const containerWidth = lotteryContainer.offsetWidth;
-  const containerHeight = lotteryContainer.offsetHeight;
-
-  // Define the area around the center (focus area) to spawn the balls
-  const focusAreaWidth = containerWidth / 1;
-  const focusAreaHeight = containerHeight / 1;
-
-  for (let i = 0; i < 10; i++) {
-    const ball = document.createElement("div");
-    ball.classList.add("balls", "showball");
-    let choosenImg = numberImgArray[i];
-    ball.innerHTML = `<img src="${choosenImg.img}" alt="" class="full-screen-numberimg">`;
-
-    // Randomly position balls in a focus area around the center
-    // Ensure balls are placed inside the div
-    const randomX = Math.random() * (focusAreaWidth - 30) + containerWidth / 1; // Prevent going off the container
-    const randomY =
-      Math.random() * (focusAreaHeight - 30) + containerHeight / 1; // Prevent going off the container
-    ball.style.left = `${randomX}px`;
-    ball.style.top = `${randomY}px`;
-
-    lotteryContainer.appendChild(ball);
-    balls.push(ball);
-  }
-}
-
-function animateBalls() {
-  balls.forEach((ball) => {
-    // Apply random movement to each ball
-    const randomXSpeed = (Math.random() - 10) * 50; // Random speed for X axis
-    const randomYSpeed = (Math.random() - 10) * 50; // Random speed for Y axis
-
-    // Animation loop
-    ball.style.animation = `ballAnimation ${
-      Math.random() * 8 + 1
-    }s linear infinite`;
-
-    ball.style.setProperty("--randomX", `${randomXSpeed}px`);
-    ball.style.setProperty("--randomY", `${randomYSpeed}px`);
-  });
-}
-
-// Example of function calls to test the flow
-createBalls();
-animateBalls();
 
 const results_close = document.getElementById("results_close");
 results_close.addEventListener("click", () => {
@@ -918,3 +886,201 @@ const intro = new Howl({
   loop: false,
   volume: 1.0,
 });
+
+
+
+
+
+
+
+
+
+
+// ========== NEW SLOT SYSTEM ==========
+const slotReels = {
+  left: document.getElementById("reel1"),
+  middle: document.getElementById("reel2"),
+  right: document.getElementById("reel3"),
+};
+
+const slotSymbols = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+const slotRepeats = 8;
+const slotSymbolHeight = 120;
+const slotCycle = slotSymbols.length * slotSymbolHeight;
+const slotStopDuration = 2500; // ms
+const slotExtraSpins = 4;
+
+// Initialize slot reels
+function initSlotReel(reel) {
+  const inner = reel.querySelector(".reel-inner");
+  inner.innerHTML = "";
+  for (let i = 0; i < slotRepeats; i++) {
+    slotSymbols.forEach((sym) => {
+      const div = document.createElement("div");
+      div.className = "slot-symbol";
+      div.textContent = sym;
+      inner.appendChild(div);
+    });
+  }
+}
+
+function getSlotTranslateY(inner) {
+  const style = window.getComputedStyle(inner);
+  const matrix = style.transform || style.webkitTransform || "none";
+  if (matrix === "none") return 0;
+  const values = matrix.split("(")[1].split(")")[0].split(",");
+  return parseFloat(values[5]) || 0;
+}
+
+function startSlotSpin(reel) {
+  const inner = reel.querySelector(".reel-inner");
+  
+  // Remove all states
+  reel.classList.remove("slot-stopping", "slot-slowing", "slot-slow", "slot-spinning", "slot-accelerating");
+  
+  // Reset position
+  inner.style.transition = "none";
+  inner.style.transform = "translateY(0)";
+  
+  // Phase 1: Start slow (starting)
+  reel.classList.add("slot-starting");
+  
+  // Phase 2: Accelerate after 200ms
+  setTimeout(() => {
+    if (reel.classList.contains("slot-starting")) {
+      reel.classList.remove("slot-starting");
+      reel.classList.add("slot-accelerating");
+    }
+  }, 200);
+  
+  // Phase 3: Full speed after 500ms
+  setTimeout(() => {
+    if (reel.classList.contains("slot-accelerating")) {
+      reel.classList.remove("slot-accelerating");
+      reel.classList.add("slot-spinning");
+    }
+  }, 500);
+}
+
+function stopSlotSpin(reel, targetDigit) {
+  const inner = reel.querySelector(".reel-inner");
+  const targetIndex = parseInt(targetDigit);
+  if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > 9) {
+    console.error("Invalid slot digit:", targetDigit);
+    return;
+  }
+  
+  const targetP = targetIndex * slotSymbolHeight;
+  const currentY = getSlotTranslateY(inner);
+  const currentP = -currentY;
+  const currentMod = ((currentP % slotCycle) + slotCycle) % slotCycle;
+  const targetMod = ((targetP % slotCycle) + slotCycle) % slotCycle;
+  const fraction = (targetMod - currentMod + slotCycle) % slotCycle;
+  const additional = slotExtraSpins * slotCycle + fraction;
+  const toP = currentP + additional;
+  const toY = -toP;
+
+  // Phase 1: Slow down from fast to medium
+  if (reel.classList.contains("slot-spinning")) {
+    reel.classList.remove("slot-spinning");
+    reel.classList.add("slot-slowing");
+    
+    // Phase 2: Slow down more after 300ms
+    setTimeout(() => {
+      if (reel.classList.contains("slot-slowing")) {
+        reel.classList.remove("slot-slowing");
+        reel.classList.add("slot-slow");
+      }
+    }, 300);
+    
+    // Phase 3: Stop after 600ms
+    setTimeout(() => {
+      if (reel.classList.contains("slot-slow")) {
+        reel.classList.remove("slot-slow");
+        reel.classList.add("slot-stopping");
+        
+        // Set the final position with smooth deceleration
+        setTimeout(() => {
+          inner.style.transition = `transform 2.8s cubic-bezier(0.25, 0.46, 0.45, 1.02)`;
+          inner.style.transform = `translateY(${toY}px)`;
+        }, 50);
+        
+        // Final snap to exact position
+        setTimeout(() => {
+          inner.style.transition = "none";
+          inner.style.transform = `translateY(${-targetP}px)`;
+          reel.classList.remove("slot-stopping");
+          
+          // Reset transition for next spin
+          setTimeout(() => {
+            inner.style.transition = "transform 0.3s ease";
+          }, 100);
+        }, 2800);
+      }
+    }, 600);
+  } else {
+    // If not spinning, go directly to stopping
+    reel.classList.remove("slot-starting", "slot-accelerating", "slot-slowing", "slot-slow");
+    reel.classList.add("slot-stopping");
+    
+    setTimeout(() => {
+      inner.style.transition = `transform 2.8s cubic-bezier(0.25, 0.46, 0.45, 1.02)`;
+      inner.style.transform = `translateY(${toY}px)`;
+    }, 50);
+    
+    setTimeout(() => {
+      inner.style.transition = "none";
+      inner.style.transform = `translateY(${-targetP}px)`;
+      reel.classList.remove("slot-stopping");
+      setTimeout(() => {
+        inner.style.transition = "transform 0.3s ease";
+      }, 100);
+    }, 2800);
+  }
+}
+
+function setSlotWithoutAnimation(reel, targetDigit) {
+  const inner = reel.querySelector(".reel-inner");
+  const targetIndex = parseInt(targetDigit);
+  if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > 9) return;
+  const targetP = targetIndex * slotSymbolHeight;
+  inner.style.transition = "none";
+  inner.style.transform = `translateY(${-targetP}px)`;
+  reel.classList.remove("slot-spinning", "slot-stopping", "slot-starting", "slot-accelerating", "slot-slowing", "slot-slow");
+}
+
+function resetSlot() {
+  Object.values(slotReels).forEach((reel) => {
+    if (reel) {
+      setSlotWithoutAnimation(reel, "0");
+    }
+  });
+}
+
+// Slot control functions
+function startSlotMachine() {
+  console.log("Starting slot machine");
+  Object.values(slotReels).forEach((reel) => {
+    if (reel) startSlotSpin(reel);
+  });
+}
+
+function setSlotFirstLast(firstDigit, lastDigit) {
+  console.log("Setting slot first and last:", firstDigit, lastDigit);
+  if (slotReels.left) stopSlotSpin(slotReels.left, firstDigit);
+  if (slotReels.right) stopSlotSpin(slotReels.right, lastDigit);
+  // Middle keeps spinning
+}
+
+function setSlotResult(middleDigit) {
+  console.log("Setting slot result (middle):", middleDigit);
+  if (slotReels.middle) stopSlotSpin(slotReels.middle, middleDigit);
+}
+
+// Initialize slot reels
+if (slotReels.left && slotReels.middle && slotReels.right) {
+  Object.values(slotReels).forEach((reel) => {
+    initSlotReel(reel);
+    setSlotWithoutAnimation(reel, "0");
+  });
+}
